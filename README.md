@@ -10,26 +10,26 @@ This module centralizes all communication within the platform, reducing reliance
 ---
 ### Features
 1. Real-time Messaging
-    Instant one-to-one communication between freelancers and clients
+    -Instant one-to-one communication between freelancers and clients
 2. Group Chats
-    Support for team-based communication involving multiple users
+    -Support for team-based communication involving multiple users
 3. File Sharing
-    Upload, send, and download files within conversations
+    -Upload, send, and download files within conversations
 4. Notifications System
-    Real-time alerts for messages and meetings
+    -Real-time alerts for messages and meetings
 5. Meeting Integration
-    Generate and share meeting links via Zoom / Google Meet
+    -Generate and share meeting links via Zoom / Google Meet
 6. Message History
-    Persistent storage and retrieval of all conversations
+    -Persistent storage and retrieval of all conversations
 
 ---
 ### Tech Stack
--Frontend: HTML, CSS, JavaScript, React.js
--Backend: Node.js / Python
--Database: PostgreSQL
--Real-time Communication: WebSockets
--APIs: Zoom API, Google Meet integration
--Version Control: GitHub
+- Frontend: HTML, CSS, JavaScript, React.js
+- Backend: Node.js / Python
+- Database: PostgreSQL
+- Real-time Communication: WebSockets
+- APIs: Zoom API, Google Meet integration
+- Version Control: GitHub
 
 ---
 ### Installation
