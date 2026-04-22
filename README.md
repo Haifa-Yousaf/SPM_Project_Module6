@@ -1,14 +1,14 @@
-### National Freelance and Job Verification Platform
+## National Freelance and Job Verification Platform
 ## Communication & Notifications Module
 
 ---
-## Overview
+### Overview
 
 The **Communication & Notification Module** is a core component of the National Freelance and Skill Verification Platform. It enables secure, real-time interaction between freelancers and clients, ensuring efficient collaboration throughout project lifecycles.
 This module centralizes all communication within the platform, reducing reliance on external tools and improving transparency, productivity, and user experience.
 
 ---
-## Features
+### Features
 1. Real-time Messaging
     Instant one-to-one communication between freelancers and clients
 2. Group Chats
@@ -23,7 +23,7 @@ This module centralizes all communication within the platform, reducing reliance
     Persistent storage and retrieval of all conversations
 
 ---
-## Tech Stack
+### Tech Stack
 -Frontend: HTML, CSS, JavaScript, React.js
 -Backend: Node.js / Python
 -Database: PostgreSQL
@@ -32,7 +32,7 @@ This module centralizes all communication within the platform, reducing reliance
 -Version Control: GitHub
 
 ---
-## Installation
+### Installation
 
 ```bash
 # Clone repository
