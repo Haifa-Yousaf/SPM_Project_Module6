@@ -16,19 +16,19 @@ This module centralizes all communication within the platform, reducing reliance
 3. File Sharing
     -Upload, send, and download files within conversations
 4. Notifications System
-    -Real-time alerts for messages and meetings
+    -Real-time alerts for messages.
 5. Meeting Integration
-    -Generate and share meeting links via Zoom / Google Meet
+    -Generate and share meeting links via daily.co
 6. Message History
     -Persistent storage and retrieval of all conversations
 
 ---
 ### Tech Stack
-- Frontend: HTML, CSS, JavaScript, React.js
-- Backend: Node.js / Python
+- Frontend: Next.js and CSS
+- Backend: Node.js and NextJS
 - Database: PostgreSQL
 - Real-time Communication: WebSockets
-- APIs: Zoom API, Google Meet integration
+- APIs: daily.co API integration
 - Version Control: GitHub
 
 ---
