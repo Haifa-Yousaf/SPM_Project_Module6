@@ -199,12 +199,47 @@ function BackBtn({ onClick, T }) {
 }
 
 // ─── FILE UPLOAD POPUP ───────────────────────────────────────
-function FileUploadPopup({ onClose, T }) {
+function FileUploadPopup({ onClose, T , sendMessage}) {
   const types = [
     { label: "Image", sub: "PNG, JPEG, GIF, WEBP", icon: "image", accept: ".png,.jpg,.jpeg,.gif,.webp" },
     { label: "Video", sub: "MP4, MOV, AVI",        icon: "video_file", accept: ".mp4,.mov,.avi" },
     { label: "Document",sub:"PDF, DOCX, XLSX, TXT", icon: "description", accept: ".pdf,.docx,.xlsx,.txt" },
   ];
+  const handleFileChange = async (e) => {
+    const selectedFile = e.target.files[0];
+    console.log("File selected:", selectedFile);
+    if (!selectedFile) return;
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    try {
+      console.log("Uploading started...");
+      const res = await fetch("http://localhost:3000/media/upload", {
+        method: "POST",
+        body: formData,
+      });
+      console.log("Response received:", res);
+      const data = await res.json();
+
+      console.log("Uploaded:", data);
+
+      //  Send to chat system
+      if (sendMessage) {
+        sendMessage({
+          content: data.fileUrl,
+          type: data.type,
+        });
+      }
+
+      // close popup after upload
+      onClose();
+
+    } 
+    catch (err) {
+      console.error("Upload failed", err);
+    }
+  };
   return (
     <div style={{ position: "absolute", bottom: 70, left: 16, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16, boxShadow: "0 8px 24px rgba(0,23,54,0.12)", zIndex: 20, width: 260 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -218,7 +253,7 @@ function FileUploadPopup({ onClose, T }) {
             <div style={{ fontWeight: 700, fontSize: 12, color: T.text }}>{t.label}</div>
             <div style={{ fontSize: 10, color: T.textMuted }}>{t.sub}</div>
           </div>
-          <input type="file" accept={t.accept} style={{ display: "none" }} onChange={onClose} />
+          <input type="file" accept={t.accept} style={{ display: "none" }} onChange={handleFileChange} />
         </label>
       ))}
     </div>
@@ -845,21 +880,33 @@ function MeetingsPage({ navigate, T }) {
   const [showCreate, setShowCreate] = useState(false);
   const [copied, setCopied] = useState(null);
   const [generatedLink, setGeneratedLink] = useState("");
-
+  const [instantMode, setInstantMode] = useState(false);
+  const [instantLink, setInstantLink] = useState("");
   const copy = (id, link) => {
     navigator.clipboard?.writeText(link).catch(() => {});
     setCopied(id);
     setTimeout(() => setCopied(null), 2000);
   };
+const generateInstantMeeting = async () => {
+  try {
+    const res = await fetch("http://localhost:3000/meeting/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: "Instant Meeting",
+      }),
+    });
 
-  // 🔥 Instant Google Meet link generator (mock)
-  const generateInstantMeeting = () => {
-    const link = `https://meet.google.com/${Math.random()
-      .toString(36)
-      .substring(2, 10)}`;
-    setGeneratedLink(link);
-  };
+    const data = await res.json();
 
+    setGeneratedLink(data.url); 
+
+  } catch (err) {
+    console.error("Failed to generate meeting", err);
+  }
+};
   return (
     <div style={{ padding: "32px 40px", maxWidth: 1000 }}>
       <BackBtn onClick={() => navigate("messages")} T={T} />
@@ -924,7 +971,7 @@ function MeetingsPage({ navigate, T }) {
                 textTransform: "uppercase"
               }}
             >
-              Generate Google Meet Link
+              Generate Meeting Link
             </button>
           ) : (
             <>
@@ -1096,6 +1143,7 @@ function MeetingsPage({ navigate, T }) {
     </div>
   );
 }
+
 // ─── ALERTS / NOTIFICATIONS PAGE ─────────────────────────────
 function AlertsPage({ navigate, T }) {
   const [notifs, setNotifs]         = useState(ALL_NOTIFS_INIT);
