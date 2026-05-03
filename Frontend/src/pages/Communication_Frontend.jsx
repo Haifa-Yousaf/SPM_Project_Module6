@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { io } from "socket.io-client";
+
+
 
 // ─── THEME ───────────────────────────────────────────────────
 const LIGHT = {
@@ -25,6 +28,11 @@ const DARK = {
   bubble: "#264778", bubbleText: "#ecf1ff",
   otherBubble: "#002b5b", otherBubbleText: "#ecf1ff",
 };
+const NAV_ITEMS = (unreadAlerts = 0) => [
+  { id: "messages", label: "Messages", icon: "chat" },
+  { id: "meetings", label: "Meetings", icon: "event" },
+  { id: "alerts", label: "Alerts", icon: "notifications", badge: unreadAlerts },
+];
 
 // ─── SHARED DATA ─────────────────────────────────────────────
 const ALL_CONTACTS = [
@@ -130,14 +138,10 @@ function Avatar({ name, size = 38, idx = 0, isGroup = false }) {
   );
 }
 
-// ─── LAYOUT ──────────────────────────────────────────────────
-const NAV_ITEMS = [
-  { id: "messages",  icon: "chat",          label: "Messages", badge: 5 },
-  { id: "meetings",  icon: "video_call",    label: "Meetings" },
-  { id: "alerts",    icon: "notifications", label: "Alerts",   badge: 3 },
-];
 
-function Layout({ children, navigate, page, T, darkMode, setDarkMode }) {
+function Layout({ children, navigate, page, T, darkMode, setDarkMode, alerts, unreadAlerts, setUnreadAlerts, setAlerts}) {
+  // NAV
+ const items = NAV_ITEMS(unreadAlerts);
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "'Inter',sans-serif", background: T.bg }}>
       <style>{FONTS}</style>
@@ -154,22 +158,127 @@ function Layout({ children, navigate, page, T, darkMode, setDarkMode }) {
         </div>
       </header>
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* SIDEBAR — Messages, Meetings, Alerts only */}
-        <aside style={{ width: 220, background: T.sidebarBg, borderRight: `1px solid ${T.border}`, display: "flex", flexDirection: "column", padding: 14, position: "sticky", top: 56, height: "calc(100vh - 56px)", flexShrink: 0, overflowY: "auto" }}>
-          <p style={{ fontSize: 9, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: 10, paddingLeft: 10 }}>Navigation</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-            {NAV_ITEMS.map(item => {
-              const active = page === item.id;
-              return (
-                <button key={item.id} onClick={() => navigate(item.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 8, background: active ? T.surface : "transparent", color: active ? T.text : T.textSub, boxShadow: active ? "0 1px 4px rgba(0,23,54,0.08)" : "none", border: "none", cursor: "pointer", textAlign: "left", width: "100%", transition: "all 0.15s" }}>
-                  <span className={`msi${active ? " fill" : ""}`} style={{ fontSize: 18, color: active ? "#6bd8cb" : "inherit" }}>{item.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", flex: 1 }}>{item.label}</span>
-                  {item.badge && <span style={{ background: item.id === "alerts" ? "#ba1a1a" : "#405f91", color: "#fff", fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 9999 }}>{item.badge}</span>}
-                </button>
-              );
-            })}
-          </div>
+<div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+  {/* SIDEBAR — Messages, Meetings, Alerts only */}
+  <aside
+    style={{
+      width: 220,
+      background: T.sidebarBg,
+      borderRight: `1px solid ${T.border}`,
+      display: "flex",
+      flexDirection: "column",
+      padding: 14,
+      position: "sticky",
+      top: 56,
+      height: "calc(100vh - 56px)",
+      flexShrink: 0,
+      overflowY: "auto",
+    }}
+  >
+    <p
+      style={{
+        fontSize: 9,
+        fontWeight: 800,
+        color: T.textMuted,
+        textTransform: "uppercase",
+        letterSpacing: "0.2em",
+        marginBottom: 10,
+        paddingLeft: 10,
+      }}
+    >
+      Navigation
+    </p>
+
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+  {items.map((item) => {
+    const active = page === item.id;
+
+    const handleClick = () => {
+      // ================= ALERTS =================
+      if (item.id === "alerts") {
+        navigate("alerts");
+
+        // mark all as read
+        setAlerts((prev) =>
+          prev.map((a) => ({ ...a, read: true }))
+        );
+
+        // reset unread counter
+        setUnreadAlerts(0);
+        return;
+      }
+
+      // ================= NORMAL NAV =================
+      navigate(item.id);
+    };
+
+    return (
+      <button
+        key={item.id}
+        onClick={handleClick}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "9px 10px",
+          borderRadius: 8,
+          background: active ? T.surface : "transparent",
+          color: active ? T.text : T.textSub,
+          boxShadow: active
+            ? "0 1px 4px rgba(0,23,54,0.08)"
+            : "none",
+          border: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          width: "100%",
+          transition: "all 0.15s",
+        }}
+      >
+        {/* ICON */}
+        <span
+          className={`msi${active ? " fill" : ""}`}
+          style={{
+            fontSize: 18,
+            color: active ? "#6bd8cb" : "inherit",
+          }}
+        >
+          {item.icon}
+        </span>
+
+        {/* LABEL */}
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            flex: 1,
+          }}
+        >
+          {item.label}
+        </span>
+
+        {/* BADGE (IMPORTANT FIX HERE) */}
+        {item.id === "alerts" && unreadAlerts > 0 && (
+          <span
+            style={{
+              background: "#ba1a1a",
+              color: "#fff",
+              fontSize: 9,
+              fontWeight: 700,
+              padding: "1px 5px",
+              borderRadius: 9999,
+              minWidth: 16,
+              textAlign: "center",
+            }}
+          >
+            {unreadAlerts}
+          </span>
+        )}
+      </button>
+    );
+  })}
+</div>
           {/* Settings at bottom with dark mode toggle */}
           <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 10, marginTop: 10 }}>
             <button onClick={() => setDarkMode(d => !d)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", background: "none", border: "none", color: T.textSub, cursor: "pointer", borderRadius: 8, width: "100%", transition: "all 0.15s" }}>
@@ -259,69 +368,412 @@ function FileUploadPopup({ onClose, T , sendMessage}) {
     </div>
   );
 }
+function MessagesPage({ userId, navigate, T,alerts,setAlerts, unreadAlerts,setUnreadAlerts }) {
+  //const [userId, setUserId] = useState(null);
+  const socketRef = useRef(null);
 
-// ─── MESSAGES PAGE (overview + individual + groups merged) ───
-function MessagesPage({ navigate, T }) {
-  // sub-views: "summary" | "chat" | "new_message" | "create_group_step1" | "create_group_step2" | "profile" | "media"
-  const [view, setView]           = useState("summary");
+  const [view, setView] = useState("summary");
   const [selContact, setSelContact] = useState(null);
-  const [selGroup, setSelGroup]   = useState(null);
-  const [msgs, setMsgs]           = useState(INIT_MSGS);
+  const [selGroup, setSelGroup] = useState(null);
+
+  const [msgs, setMsgs] = useState(INIT_MSGS);
   const [groupMsgs, setGroupMsgs] = useState(GROUP_MSGS);
-  const [groups, setGroups]       = useState(INIT_GROUPS);
-  const [input, setInput]         = useState("");
+  const [groups, setGroups] = useState(INIT_GROUPS);
+
+  const [input, setInput] = useState("");
   const [showFilePopup, setShowFilePopup] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
-  // new message
   const [newMsgSearch, setNewMsgSearch] = useState("");
 
-  // create group
   const [groupStep1Selected, setGroupStep1Selected] = useState([]);
   const [newGroupName, setNewGroupName] = useState("");
 
-  // add member to group (only admin)
   const [showAddMember, setShowAddMember] = useState(false);
 
-  const isMyAdmin = selGroup && selGroup.adminId === 3; // current user id is 3 (Marcus = example; just use id 99 = "me")
-  // (for demo purposes, let's make the current user be "me" with id 99 — admin of groups they created)
+  const isMyAdmin = selGroup && selGroup.adminId === 3;
+
+
+  const openAlerts = () => {
+    setUnreadAlerts(0);
+  };
+
+
+
+  useEffect(() => {
+  if (!userId) return;
+
+  const socket = io("http://localhost:3000");
+  socketRef.current = socket;
+
+  socket.on("connect", () => {
+    console.log("Connected:", socket.id);
+    socket.emit("join", String(userId));
+  });
+
+  return () => socket.disconnect();
+}, [userId]);
+
+
+
+  
+  // ===============================
+  // OPEN CHAT
+  // ===============================
+useEffect(() => {
+  if (!userId) return;
+
+  const target = window.__OPEN_CHAT_ID;
+  if (!target) return;
+
+  const contact = ALL_CONTACTS.find(
+    c => String(c.id) === String(target)
+  );
+
+  if (contact) {
+    setSelContact(contact);
+    setView("chat");
+  }
+
+  window.__OPEN_CHAT_ID = null;
+}, [userId]);
+
+  // ===============================
+  // PRIVATE MESSAGE HANDLER
+  // ===============================
+  const handlePrivate = useCallback((message) => {
+  console.log("📩 MESSAGE RECEIVED:", message);
+
+  const senderId = String(message.senderId);
+  const receiverId = String(message.receiverId);
+
+  const formattedMsg = {
+    id: message.messageId || Date.now(),
+    messageId: message.messageId,
+    from: senderId,
+    text: message.content,
+    type: message.type,
+    time: new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    mine: false,
+  };
+
+  // =============================
+  // UPDATE CHAT MESSAGES
+  // =============================
+  setMsgs((prev) => ({
+    ...prev,
+    [senderId]: [
+      ...(prev[senderId] || []),
+      formattedMsg,
+    ],
+  }));
+
+  // =============================
+  // ALERT OBJECT
+  // =============================
+ const alert = {
+  id: message.messageId || Date.now(),
+  type: "message",
+
+  senderId,
+  senderName: message.senderName || `User ${senderId}`,
+
+  title: `Message from ${message.senderName || senderId}`,
+  body: message.content,
+
+  time: new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  }),
+
+  read: false,
+};
+
+  // =============================
+  // UPDATE ALERTS
+  // =============================
+  setAlerts((prev) => [alert, ...prev]);
+  setUnreadAlerts((prev) => prev + 1);
+
+}, [setMsgs, setAlerts, setUnreadAlerts]);
+
+
+
+// ===============================
+// GROUP MESSAGE HANDLER (UPDATED)
+// ===============================
+const handleGroup = (message) => {
+  console.log("📩 GROUP MESSAGE RECEIVED:", message);
+
+  const groupMsg = {
+    id: message.messageId || Date.now(),
+    messageId: message.messageId,
+    from: message.senderId,
+    text: message.content,
+    mine: String(message.senderId) === String(userId),
+    status: message.status || "sent",
+    type: message.type || "text",
+    roomId: message.roomId,
+    time: new Date(message.timestamp || Date.now()).toLocaleTimeString(
+      [],
+      { hour: "2-digit", minute: "2-digit" }
+    ),
+  };
+
+  // =========================
+  // UPDATE GROUP MESSAGES
+  // =========================
+  setGroupMsgs((prev) => ({
+    ...prev,
+    [message.roomId]: [
+      ...(prev[message.roomId] || []),
+      groupMsg,
+    ],
+  }));
+
+  // =========================
+  // ALERT ONLY IF NOT SENDER
+  // =========================
+  if (String(message.senderId) !== String(userId)) {
+    const alert = {
+  id: message.messageId || Date.now(),
+  type: "group",
+  roomId: message.roomId,
+  senderId: message.senderId,
+  from: `Group ${message.roomId}`,
+  title: `Group message from User ${message.senderId}`,
+  text: message.content,
+  preview: message.content,
+  time: new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  }),
+  read: false,
+};
+
+    setAlerts((prev) => [alert, ...prev]);
+    setUnreadAlerts((prev) => prev + 1);
+  }
+};
+
+  // ===============================
+  // STATUS UPDATE HANDLER
+  // ===============================
+  const handleStatus = (updated) => {
+    setMsgs((prev) => {
+      const copy = { ...prev };
+
+      Object.keys(copy).forEach((uid) => {
+        copy[uid] = copy[uid].map((msg) =>
+          msg.messageId === updated.messageId
+            ? { ...msg, status: updated.status }
+            : msg
+        );
+      });
+
+      return copy;
+    });
+  };
+
+  // ===============================
+  // SOCKET LISTENERS
+  // ===============================
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !userId) return;
+
+    console.log("🔥 ATTACHING SOCKET LISTENERS");
+
+    socket.off("receiveMessage");
+    socket.off("receiveGroupMessage");
+    socket.off("statusUpdate");
+
+    socket.on("receiveMessage", handlePrivate);
+    socket.on("receiveGroupMessage", handleGroup);
+    socket.on("statusUpdate", handleStatus);
+
+    return () => {
+      socket.off("receiveMessage", handlePrivate);
+      socket.off("receiveGroupMessage", handleGroup);
+      socket.off("statusUpdate", handleStatus);
+    };
+  }, [userId, handlePrivate]);
+
+  // ===============================
+  // DEBUG USER
+  // ===============================
+  useEffect(() => {
+    if (userId) {
+      console.log("👤 CURRENT SOCKET USER ID:", userId);
+    }
+  }, [userId]);
 
   const allConversations = [
-    ...ALL_CONTACTS.filter(c => c.chatted).map(c => ({
+    ...ALL_CONTACTS.filter((c) => c.chatted).map((c) => ({
       ...c,
       isGroup: false,
       lastMsg: (msgs[c.id] || []).slice(-1)[0]?.text || "",
       unread: c.id === 1 ? 3 : c.id === 2 ? 1 : 0,
     })),
-    ...groups.map(g => ({
+    ...groups.map((g) => ({
       ...g,
       id: g.id,
       name: g.name,
       online: false,
     })),
   ];
+// =====================================================
+// SEND MESSAGE
+// =====================================================
+const sendMsg = (fileData = null) => {
+  const finalContent = fileData ? fileData.content : input.trim();
+  const finalType = fileData ? fileData.type : "text";
 
-  const sendMsg = () => {
-    if (!input.trim()) return;
-    const m = { id: Date.now(), from: "me", text: input.trim(), time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), mine: true, status: "sent", type: "text" };
-    if (selGroup) {
-      setGroupMsgs(p => ({ ...p, [selGroup.id]: [...(p[selGroup.id] || []), m] }));
-    } else if (selContact) {
-      setMsgs(p => ({ ...p, [selContact.id]: [...(p[selContact.id] || []), m] }));
-    }
-    setInput("");
+  if (!finalContent || !userId) return;
+  const messageId = Date.now();
+
+  const localMsg = {
+    id: messageId,
+    messageId,
+    from: userId,
+    text: finalContent,
+    time: new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    mine: true,
+    status: "sending",
+    type: finalType,
   };
 
+  // ================= PRIVATE CHAT =================
+  if (selContact) {
+    setMsgs((prev) => ({
+      ...prev,
+      [selContact.id]: [...(prev[selContact.id] || []), localMsg],
+    }));
+
+    const payload = {
+      messageId,
+      senderId: userId,
+      receiverId: String(selContact.id), 
+      content: finalContent,
+      type: finalType,
+    };
+
+    let delivered = false;
+    let retryCount = 0;
+
+    socketRef.current.emit("sendMessage", payload);
+
+    const timer = setInterval(() => {
+      if (!delivered && retryCount < 2) {
+        retryCount++;
+        socketRef.current.emit("sendMessage", payload);
+      }
+    }, 3000);
+
+    const handleStatus = (msg) => {
+      if (msg.messageId === messageId) {
+        delivered = true;
+        clearInterval(timer);
+        socketRef.current.off("statusUpdate", handleStatus);
+      }
+    };
+
+    socketRef.current.on("statusUpdate", handleStatus);
+  }
+
+  // ================= GROUP CHAT =================
+  else if (selGroup) {
+    setGroupMsgs((prev) => ({
+      ...prev,
+      [selGroup.id]: [...(prev[selGroup.id] || []), localMsg],
+    }));
+
+    const payload = {
+      messageId,
+      roomId: selGroup.id,
+      senderId: userId,
+      content: finalContent,
+      type: finalType,
+    };
+
+    let delivered = false;
+    let retryCount = 0;
+
+    socketRef.current.emit("sendGroupMessage", payload);
+
+    const timer = setInterval(() => {
+      if (!delivered && retryCount < 2) {
+        retryCount++;
+        socketRef.current.emit("sendGroupMessage", payload);
+      }
+    }, 3000);
+
+    const handleStatus = (msg) => {
+      if (msg.messageId === messageId) {
+        delivered = true;
+        clearInterval(timer);
+        socketRef.current.off("statusUpdate", handleStatus);
+      }
+    };
+socketRef.current.on("receiveMessage", (msg) => {
+  console.log("📩 MESSAGE RECEIVED:", msg);
+
+  const incomingMsg = {
+    id: msg.messageId,
+    from: Number(msg.senderId),
+    text: msg.text,
+    mine: false,
+    time: new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    status: "read",
+  };
+
+  setMsgs(prev => [...prev, incomingMsg]);
+
+  setAlerts(prev => [
+    {
+      id: Date.now(),
+      type: "message",
+      from: `User ${msg.senderId}`,
+      senderId: msg.senderId,
+      title: "New Message",
+      body: msg.content,
+      time: "Just now",
+      read: false,
+      icon: "mail",
+      bg: "#e8f0fe",
+      color: "#405f91",
+    },
+    ...prev,
+  ]);
+
+  setUnreadAlerts(p => p + 1);
+
+
+});
+  }
+
+  setInput("");
+};
   const deleteChat = () => {
-    if (selContact) setMsgs(p => ({ ...p, [selContact.id]: [] }));
+    if (selContact) setMsgs((p) => ({ ...p, [selContact.id]: [] }));
     setShowDeleteConfirm(false);
   };
 
   const handleGroupStep1Toggle = (id) => {
-    setGroupStep1Selected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setGroupStep1Selected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   };
-
   const createGroup = () => {
     if (!newGroupName.trim() || groupStep1Selected.length < 1) return;
     const newG = {
@@ -367,6 +819,8 @@ function MessagesPage({ navigate, T }) {
               })}
           </p>
         </div>
+
+        
 
         {/* Stats */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 28 }}>
@@ -770,49 +1224,191 @@ function MessagesPage({ navigate, T }) {
           )}
 
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px 22px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-              <div style={{ flex: 1, height: 1, background: T.border }}></div>
-              <span style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>Today</span>
-              <div style={{ flex: 1, height: 1, background: T.border }}></div>
-            </div>
-            {currentMsgs.map((msg, mi) => (
-              <div key={msg.id} style={{ display: "flex", justifyContent: msg.mine ? "flex-end" : "flex-start", marginBottom: 10 }}>
-                {!msg.mine && (
-                  <div style={{ width: 30, height: 30, borderRadius: 7, background: memberColors[mi % memberColors.length], display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Manrope',sans-serif", fontWeight: 800, color: "#fff", fontSize: 11, marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>
-                    {(msg.from || "?")[0]}
-                  </div>
-                )}
-                <div style={{ maxWidth: "58%" }}>
-                  {selGroup && !msg.mine && <div style={{ fontSize: 10, fontWeight: 700, color: T.textSub, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{msg.from} {msg.role === "admin" && <span style={{ background: "#d6e3ff", color: "#405f91", padding: "0 4px", borderRadius: 3, fontSize: 8 }}>Admin</span>}</div>}
-                  {msg.type === "file" ? (
-                    <div style={{ padding: "10px 14px", borderRadius: "14px 14px 14px 4px", background: T.otherBubble, color: T.otherBubbleText, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 8 }}>
-                      <span className="msi" style={{ color: "#ba1a1a", fontSize: 20 }}>picture_as_pdf</span>
-                      <span style={{ fontSize: 12 }}>{msg.fileName}</span>
-                    </div>
-                  ) : (
-                    <div style={{ padding: "9px 13px", borderRadius: msg.mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: msg.mine ? T.bubble : T.otherBubble, color: msg.mine ? T.bubbleText : T.otherBubbleText, fontSize: 13, lineHeight: 1.5, border: msg.mine ? "none" : `1px solid ${T.border}`, boxShadow: "0 1px 3px rgba(0,23,54,0.05)" }}>{msg.text}</div>
-                  )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 3, justifyContent: msg.mine ? "flex-end" : "flex-start" }}>
-                    <span style={{ fontSize: 10, color: T.textMuted }}>{msg.time}</span>
-                    {msg.mine && !selGroup && <span className="msi" style={{ fontSize: 11, color: msg.status === "read" ? "#2ca397" : T.textMuted }}>{msg.status === "read" ? "done_all" : "check"}</span>}
-                  </div>
-                </div>
-              </div>
-            ))}
+<div style={{ flex: 1, overflowY: "auto", padding: "20px 22px" }}>
+
+  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+    <div style={{ flex: 1, height: 1, background: T.border }} />
+    <span style={{
+      fontSize: 10,
+      fontWeight: 700,
+      color: T.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: "0.1em"
+    }}>
+      Today
+    </span>
+    <div style={{ flex: 1, height: 1, background: T.border }} />
+  </div>
+
+  {currentMsgs.map((msg, mi) => (
+    <div
+      key={msg.id}
+      style={{
+        display: "flex",
+        justifyContent: msg.mine ? "flex-end" : "flex-start",
+        marginBottom: 10
+      }}
+    >
+
+      {/* Avatar */}
+      {!msg.mine && (
+        <div style={{
+          width: 30,
+          height: 30,
+          borderRadius: 7,
+          background: memberColors[mi % memberColors.length],
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "'Manrope',sans-serif",
+          fontWeight: 800,
+          color: "#fff",
+          fontSize: 11,
+          marginRight: 8,
+          flexShrink: 0,
+          alignSelf: "flex-end"
+        }}>
+          {(msg.from || "?")[0]}
+        </div>
+      )}
+
+      <div style={{ maxWidth: "58%" }}>
+
+        {/* Sender name */}
+        {selGroup && !msg.mine && (
+          <div style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: T.textSub,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            marginBottom: 3
+          }}>
+            {msg.from}
           </div>
+        )}
+
+        {/* Message bubble */}
+        <div
+          style={{
+            padding: "9px 13px",
+            borderRadius: msg.mine
+              ? "14px 14px 4px 14px"
+              : "14px 14px 14px 4px",
+            background: msg.mine ? T.bubble : T.otherBubble,
+            color: msg.mine ? T.bubbleText : T.otherBubbleText,
+            fontSize: 13,
+            lineHeight: 1.5,
+            border: msg.mine ? "none" : `1px solid ${T.border}`,
+            boxShadow: "0 1px 3px rgba(0,23,54,0.05)",
+          }}
+        >
+
+          {/* IMAGE */}
+          {msg.type === "image" && (
+            <img src={msg.text} width="180" alt="img" style={{ borderRadius: 10 }} />
+          )}
+
+          {/* VIDEO */}
+          {msg.type === "video" && (
+            <video src={msg.text} width="220" controls style={{ borderRadius: 10 }} />
+          )}
+
+          {/* PDF */}
+          {msg.type === "pdf" && (
+            <a href={msg.text} target="_blank" rel="noreferrer">
+              📕 Open PDF
+            </a>
+          )}
+
+          {/* DOCS (FIXED PART) */}
+          {["doc", "docx", "txt", "xlsx", "ppt", "pptx"].includes(msg.type) && (
+            <a href={msg.text} target="_blank" rel="noreferrer">
+              📄 Open Document
+            </a>
+          )}
+
+          {/* TEXT */}
+          {msg.type === "text" && msg.text}
+        </div>
+
+        {/* Status + time */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 3,
+          marginTop: 3,
+          justifyContent: msg.mine ? "flex-end" : "flex-start"
+        }}>
+          <span style={{ fontSize: 10, color: T.textMuted }}>
+            {msg.time}
+          </span>
+
+          {msg.mine && !selGroup && (
+            <span style={{
+              fontSize: 11,
+              color: msg.status === "read" ? "#2ca397" : T.textMuted
+            }}>
+              {msg.status === "read" ? "✓✓" : "✓"}
+            </span>
+          )}
+        </div>
+
+      </div>
+    </div>
+  ))}
+</div>
 
           {/* Input, file sharing per contact */}
-          <div style={{ padding: "13px 20px", background: T.surface, borderTop: `1px solid ${T.border}`, position: "relative" }}>
-            {showFilePopup && <FileUploadPopup onClose={() => setShowFilePopup(false)} T={T} />}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: T.inputBg, borderRadius: 10, padding: "7px 14px" }}>
+<div
+  style={{
+    padding: "13px 20px",
+    background: T.surface,
+    borderTop: `1px solid ${T.border}`,
+    position: "relative",
+  }}
+>
+  {showFilePopup && (
+    <>
+      {/* dark outside overlay */}
+      <div
+        onClick={() => setShowFilePopup(false)}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 999,
+        }}
+      />
+
+      {/* popup box */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 65,
+          left: 20,
+          zIndex: 1000,
+        }}
+      >
+        <FileUploadPopup
+          onClose={() => setShowFilePopup(false)}
+          T={T}
+          sendMessage={sendMsg}
+        />
+      </div>
+    </>
+  )}     
+<div style={{ display: "flex", alignItems: "center", gap: 8, background: T.inputBg, borderRadius: 10, padding: "7px 14px" }}>
               <button onClick={() => setShowFilePopup(v => !v)} style={{ background: "none", border: "none", cursor: "pointer", color: T.textSub, display: "flex", padding: 2 }}>
                 <span className="msi" style={{ fontSize: 19 }}>attach_file</span>
               </button>
               <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMsg()} placeholder="Type a message…" style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 13, color: T.text, fontFamily: "'Inter',sans-serif" }} />
               <button onClick={sendMsg} style={{ background: "#001736", border: "none", cursor: "pointer", color: "#fff", width: 34, height: 34, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span className="msi" style={{ fontSize: 17 }}>send</span>
-              </button>
+                <span
+                className="msi" style={{ fontSize: 17 }}>send</span>
+              </button>1
             </div>
           </div>
         </div>
@@ -1145,126 +1741,380 @@ const generateInstantMeeting = async () => {
 }
 
 // ─── ALERTS / NOTIFICATIONS PAGE ─────────────────────────────
-function AlertsPage({ navigate, T }) {
-  const [notifs, setNotifs]         = useState(ALL_NOTIFS_INIT);
+function AlertsPage({
+  navigate,
+  T,
+  alerts = [],
+  setAlerts,
+  unreadAlerts,
+  setUnreadAlerts
+}) {
+
+  const notifs = alerts;
+
   const [activeFilter, setActiveFilter] = useState("All");
 
-  // Preferences stored as state so toggling actually filters
   const [prefs, setPrefs] = useState({
-    "New Messages":       true,
-    "Group Activity":     true,
-    "Meeting Reminders":  true,
-    "File Uploads":       false,
-    "Email Digest":       false,
+    "New Messages": true,
+    "Group Activity": true,
+    "Meeting Reminders": true,
+    "File Uploads": false,
+    "Email Digest": false,
     "Push Notifications": true,
   });
 
-  // type → pref key map
   const typeToPrefs = {
     message: "New Messages",
-    group:   "Group Activity",
+    group: "Group Activity",
     meeting: "Meeting Reminders",
-    file:    "File Uploads",
+    file: "File Uploads",
   };
 
-  const togglePref = (label) => setPrefs(p => ({ ...p, [label]: !p[label] }));
+  const togglePref = (label) =>
+    setPrefs((p) => ({ ...p, [label]: !p[label] }));
 
-  const markAllRead = () => setNotifs(n => n.map(x => ({ ...x, read: true })));
-  const markRead    = (id) => setNotifs(n => n.map(x => x.id === id ? { ...x, read: true } : x));
+  // ================= MARK ALL READ =================
+  const markAllRead = () => {
+    setAlerts((prev) => prev.map((x) => ({ ...x, read: true })));
+    setUnreadAlerts(0);
+  };
 
-  // Filter by tab AND by preferences
-  const shown = notifs.filter(n => {
+  // ================= MARK SINGLE READ =================
+  const markRead = (id) => {
+    setAlerts((prev) => {
+      const updated = prev.map((x) =>
+        x.id === id ? { ...x, read: true } : x
+      );
+
+      const newUnread = updated.filter((x) => !x.read).length;
+      setUnreadAlerts(newUnread);
+
+      return updated;
+    });
+  };
+
+  // ================= FILTER SAFE =================
+  const shown = (notifs || []).filter((n) => {
     const prefKey = typeToPrefs[n.type];
-    if (prefKey && !prefs[prefKey]) return false; // hidden by preference
+
+    if (prefKey && !prefs[prefKey]) return false;
+
     if (activeFilter === "All") return true;
     if (activeFilter === "Messages") return n.type === "message";
-    if (activeFilter === "Groups")   return n.type === "group";
+    if (activeFilter === "Groups") return n.type === "group";
     if (activeFilter === "Meetings") return n.type === "meeting";
-    if (activeFilter === "Files")    return n.type === "file";
+    if (activeFilter === "Files") return n.type === "file";
     return true;
   });
 
   const unread = notifs.filter(n => !n.read).length;
+return (
+  <div style={{ padding: "32px 40px", maxWidth: 860 }}>
+    <BackBtn onClick={() => navigate("messages")} T={T} />
 
-  return (
-    <div style={{ padding: "32px 40px", maxWidth: 860 }}>
-      <BackBtn onClick={() => navigate("messages")} T={T} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
-        <div>
-          <span style={{ fontSize: 10, fontWeight: 700, color: T.teal, textTransform: "uppercase", letterSpacing: "0.1em" }}>Activity Center</span>
-          <h2 style={{ fontFamily: "'Manrope',sans-serif", fontSize: 24, fontWeight: 800, color: T.text, margin: "4px 0 4px", letterSpacing: "-0.02em" }}>Notifications</h2>
-          <p style={{ fontSize: 12, color: T.textSub, margin: 0 }}>{unread > 0 ? `${unread} unread notifications` : "All caught up!"}</p>
-        </div>
-        <button onClick={markAllRead} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: unread > 0 ? "#001736" : T.inputBg, color: unread > 0 ? "#fff" : T.textMuted, border: "none", borderRadius: 8, cursor: "pointer", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          <span className="msi" style={{ fontSize: 15 }}>done_all</span>Mark All Read
+    {/* HEADER */}
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        marginBottom: 24,
+      }}
+    >
+      <div>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: T.teal,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+          }}
+        >
+          Activity Center
+        </span>
+
+        <h2
+          style={{
+            fontFamily: "'Manrope',sans-serif",
+            fontSize: 24,
+            fontWeight: 800,
+            color: T.text,
+            margin: "4px 0 4px",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Notifications
+        </h2>
+
+        <p style={{ fontSize: 12, color: T.textSub, margin: 0 }}>
+          {unread > 0 ? `${unread} unread notifications` : "All caught up!"}
+        </p>
+      </div>
+
+      <button
+        onClick={markAllRead}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "9px 16px",
+          background: unread > 0 ? "#001736" : T.inputBg,
+          color: unread > 0 ? "#fff" : T.textMuted,
+          border: "none",
+          borderRadius: 8,
+          cursor: "pointer",
+          fontSize: 10,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+        }}
+      >
+        <span className="msi" style={{ fontSize: 15 }}>
+          done_all
+        </span>
+        Mark All Read
+      </button>
+    </div>
+
+    {/* FILTERS */}
+    <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+      {["All", "Messages", "Groups", "Meetings", "Files"].map((f) => (
+        <button
+          key={f}
+          onClick={() => setActiveFilter(f)}
+          style={{
+            padding: "7px 15px",
+            borderRadius: 7,
+            border: "1px solid",
+            borderColor: activeFilter === f ? "#001736" : T.border,
+            background: activeFilter === f ? "#001736" : T.surface,
+            color: activeFilter === f ? "#fff" : T.textSub,
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.07em",
+            cursor: "pointer",
+          }}
+        >
+          {f}
+          {f === "All" && unread > 0 && (
+            <span
+              style={{
+                marginLeft: 5,
+                background: "#ba1a1a",
+                color: "#fff",
+                borderRadius: 9999,
+                padding: "0 4px",
+                fontSize: 9,
+              }}
+            >
+              {unread}
+            </span>
+          )}
         </button>
-      </div>
+      ))}
+    </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
-        {["All", "Messages", "Groups", "Meetings", "Files"].map(f => (
-          <button key={f} onClick={() => setActiveFilter(f)} style={{ padding: "7px 15px", borderRadius: 7, border: "1px solid", borderColor: activeFilter === f ? "#001736" : T.border, background: activeFilter === f ? "#001736" : T.surface, color: activeFilter === f ? "#fff" : T.textSub, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", cursor: "pointer" }}>
-            {f}{f === "All" && unread > 0 && <span style={{ marginLeft: 5, background: "#ba1a1a", color: "#fff", borderRadius: 9999, padding: "0 4px", fontSize: 9 }}>{unread}</span>}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 32 }}>
-        {shown.map(n => (
-          <div key={n.id} onClick={() => markRead(n.id)} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 18px", background: n.read ? T.surface : T.inputBg, borderRadius: 12, border: "1px solid", borderColor: n.read ? T.border : "#c4d4f8", cursor: "pointer", transition: "all 0.12s" }} onMouseOver={e => e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,23,54,0.06)"} onMouseOut={e => e.currentTarget.style.boxShadow = "none"}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: n.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span className="msi" style={{ color: n.color, fontSize: 19 }}>{n.icon}</span>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                <span style={{ fontFamily: "'Manrope',sans-serif", fontWeight: n.read ? 600 : 800, fontSize: 13, color: T.text }}>{n.title}</span>
-                <span style={{ fontSize: 10, color: T.textMuted, flexShrink: 0, marginLeft: 10 }}>{n.time}</span>
-              </div>
-              <div style={{ fontSize: 12, color: T.textSub }}>{n.body}</div>
-            </div>
-            {!n.read && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#405f91", flexShrink: 0, marginTop: 5 }}></div>}
+    {/* LIST */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 32 }}>
+      {shown.map((n) => (
+        <div
+          key={n.id}
+          onClick={() => markRead(n.id)}
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            padding: "14px 18px",
+            background: n.read ? T.surface : T.inputBg,
+            borderRadius: 12,
+            border: "1px solid",
+            borderColor: n.read ? T.border : "#c4d4f8",
+            cursor: "pointer",
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: n.bg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span className="msi" style={{ color: n.color, fontSize: 19 }}>
+              {n.icon}
+            </span>
           </div>
-        ))}
-        {shown.length === 0 && (
-          <div style={{ textAlign: "center", padding: "50px 0", color: T.textMuted }}>
-            <span className="msi" style={{ fontSize: 48, display: "block", marginBottom: 12 }}>notifications_off</span>
-            <div style={{ fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15, color: T.textSub }}>No notifications here</div>
-          </div>
-        )}
-      </div>
 
-      {/* Preferences — functional toggles */}
-      <div style={{ background: T.surface, borderRadius: 14, border: `1px solid ${T.border}`, padding: 22 }}>
-        <div style={{ fontFamily: "'Manrope',sans-serif", fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 14 }}>Notification Preferences</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {Object.entries(prefs).map(([label, enabled]) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 13px", background: T.inputBg, borderRadius: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{label}</span>
-              <div onClick={() => togglePref(label)} style={{ width: 34, height: 19, borderRadius: 9, background: enabled ? "#405f91" : T.borderStrong, position: "relative", cursor: "pointer", transition: "background 0.2s" }}>
-                <div style={{ width: 13, height: 13, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: enabled ? 18 : 3, transition: "left 0.2s", boxShadow: "0 1px 2px rgba(0,0,0,0.2)" }}></div>
-              </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontWeight: n.read ? 600 : 800, fontSize: 13 }}>
+                {n.title}
+              </span>
+              <span style={{ fontSize: 10, color: T.textMuted }}>{n.time}</span>
             </div>
-          ))}
+
+            {/* 🔥 FIX IS HERE */}
+            <div style={{ fontSize: 12, color: T.textSub }}>
+              {n.body || n.text || n.preview}
+            </div>
+          </div>
+
+          {!n.read && (
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#405f91",
+              }}
+            />
+          )}
         </div>
+      ))}
+
+      {/* EMPTY STATE */}
+      {shown.length === 0 && (
+        <div style={{ textAlign: "center", padding: "50px 0", color: T.textMuted }}>
+          <span className="msi" style={{ fontSize: 48, display: "block", marginBottom: 12 }}>
+            notifications_off
+          </span>
+          <div>No notifications here</div>
+        </div>
+      )}
+    </div>
+
+    {/* PREFERENCES */}
+    <div
+      style={{
+        background: T.surface,
+        borderRadius: 14,
+        border: `1px solid ${T.border}`,
+        padding: 22,
+      }}
+    >
+      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 14 }}>
+        Notification Preferences
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {Object.entries(prefs).map(([label, enabled]) => (
+          <div
+            key={label}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "9px 13px",
+              background: T.inputBg,
+              borderRadius: 8,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
+
+            <div
+              onClick={() => togglePref(label)}
+              style={{
+                width: 34,
+                height: 19,
+                borderRadius: 9,
+                background: enabled ? "#405f91" : T.borderStrong,
+                position: "relative",
+                cursor: "pointer",
+              }}
+            >
+              <div
+                style={{
+                  width: 13,
+                  height: 13,
+                  borderRadius: "50%",
+                  background: "#fff",
+                  position: "absolute",
+                  top: 3,
+                  left: enabled ? 18 : 3,
+                }}
+              />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
-  );
+  </div>
+);
 }
+ 
 
 // ─── ROOT APP ─────────────────────────────────────────────────
 export default function App() {
-  const [page, setPage]       = useState("messages");
+ const [page, setPage] = useState("messages");
   const [darkMode, setDarkMode] = useState(false);
+
+  const [userId, setUserId] = useState(null);
+
+  const [alerts, setAlerts] = useState([]);
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
+
+
+const socketRef = useRef(null);
   const T = darkMode ? DARK : LIGHT;
   const navigate = (p) => setPage(p);
+const askedRef = useRef(false);
 
+useEffect(() => {
+  if (askedRef.current) return;
+
+  askedRef.current = true;
+
+  let id = null;
+
+  while (!id) {
+    id = window.prompt("Enter User ID");
+  }
+
+  setUserId(id);
+}, []);
   const pages = {
-    messages: <MessagesPage navigate={navigate} T={T} />,
-    meetings: <MeetingsPage navigate={navigate} T={T} />,
-    alerts:   <AlertsPage   navigate={navigate} T={T} />,
+    messages: (
+      <MessagesPage
+       userId={userId}
+        navigate={navigate}
+        T={T}
+        alerts={alerts}
+  setAlerts={setAlerts}
+  unreadAlerts={unreadAlerts}
+  setUnreadAlerts={setUnreadAlerts}
+      />
+    ),
+    meetings: (
+      <MeetingsPage navigate={navigate} T={T} />
+    ),
+    alerts: (
+  <AlertsPage
+    navigate={navigate}
+    T={T}
+    alerts={alerts}
+    setAlerts={setAlerts}
+    unreadAlerts={unreadAlerts}
+    setUnreadAlerts={setUnreadAlerts}
+  />
+),
   };
 
   return (
-    <Layout navigate={navigate} page={page} T={T} darkMode={darkMode} setDarkMode={setDarkMode}>
+    <Layout
+      alerts={alerts}
+      unreadAlerts={unreadAlerts}
+      setAlerts={setAlerts}
+      setUnreadAlerts={setUnreadAlerts}
+      navigate={navigate}
+      page={page}
+      T={T}
+      darkMode={darkMode}
+      setDarkMode={setDarkMode}
+    >
       {pages[page] || pages.messages}
     </Layout>
   );
